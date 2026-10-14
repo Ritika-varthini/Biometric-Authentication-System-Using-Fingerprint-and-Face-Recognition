@@ -1,0 +1,144 @@
+I’m confirming the exact cryptographic mechanism used in the stored biometric templates so I can answer precisely.
+
+Read [](file:///c%3A/Users/HP/Downloads/BioSecure/src/CryptoVault.java)
+
+## Crypto used in the project
+
+The project uses AES-256-GCM.
+
+This is implemented directly in CryptoVault.java:
+
+- `Cipher.getInstance("AES/GCM/NoPadding")`
+- `SecretKeySpec(raw, "AES")`
+- `GCMParameterSpec(TAG_BITS, nonce)`
+- a fresh random 12-byte nonce for each encrypted template
+
+### What that means
+- AES = advanced encryption standard
+- 256 = 256-bit key
+- GCM = Galois/Counter Mode
+- NoPadding = stream-like block mode for authenticated encryption
+- GCM provides both:
+  - confidentiality
+  - integrity/authentication
+
+### Why it is used here
+Biometric templates (fingerprint and face feature vectors) are encrypted before being stored in SQLite. The code also binds each template to the username using AAD (additional authenticated data):
+
+- `aad(user, "fp")`
+- `aad(user, "face")`
+
+That means a template cannot be reused for another user without detection.
+
+### Important detail
+The key is not stored in the database. It is kept in a separate file named biosecure.key, as noted in README.md.
+
+So the crypto is:
+- symmetric encryption: AES-256
+- authenticated encryption: GCM
+- key storage: external file, not in SQLite
+
+> In short: the project uses AES-256-GCM for biometric template encryption and integrity protection.
+
+If you want, I can also explain how the template is encrypted step by step in the code.
+I’m checking the implementation details in the project so I can summarize the actual algorithm rather than guessing from the title.
+
+Read [](file:///c%3A/Users/HP/Downloads/BioSecure/src/AuthService.java)
+
+Read [](file:///c%3A/Users/HP/Downloads/BioSecure/src/FingerprintMatcher.java)
+
+Read [](file:///c%3A/Users/HP/Downloads/BioSecure/src/FaceMatcher.java)
+
+Read [](file:///c%3A/Users/HP/Downloads/BioSecure/src/CryptoVault.java)
+
+## Algorithm used in this project
+
+This is a hybrid biometric authentication system, not a single algorithm. The core idea is:
+
+- fingerprint matching
+- face matching
+- then score fusion
+- then threshold-based access decision
+
+You can see that in AuthService.java, FingerprintMatcher.java, and FaceMatcher.java.
+
+### 1) Fingerprint algorithm
+From FingerprintMatcher.java:
+
+- Convert image to grayscale and resize to 128×128
+- Blur and normalize contrast
+- Divide into 16×16 blocks
+- For each block, compute local gradients:
+  - $g_x$
+  - $g_y$
+- Estimate ridge orientation using the structure tensor:
+  - $g_{xx}, g_{yy}, g_{xy}$
+- Build a feature vector using the doubled-angle orientation:
+  - $\cos(2\theta)$
+  - $\sin(2\theta)$
+- Matching is done by cosine similarity between two feature vectors
+
+So the fingerprint stage is essentially a block-wise ridge-orientation field descriptor with cosine-distance matching.
+
+### 2) Face algorithm
+From FaceMatcher.java:
+
+- Crop the central face region
+- Convert to grayscale
+- Blur and histogram equalize
+- Extract Local Binary Pattern (LBP) features over a 4×4 grid
+- Each pixel gets a binary LBP code from neighboring pixels
+- Build normalized histograms for each cell
+- Matching is done by histogram intersection
+
+This is a classic texture-based face descriptor.
+
+### 3) Fusion algorithm
+In AuthService.java, the fused score is:
+
+$$
+S = w_{fp} \cdot S_{fp} + w_{face} \cdot S_{face}
+$$
+
+with:
+
+- $w_{fp} = 0.6$
+- $w_{face} = 0.4$
+
+and access is granted if:
+
+$$
+S \ge 0.60
+$$
+
+This is weighted score fusion.
+
+### 4) Security / template protection
+From CryptoVault.java:
+
+- Templates are encrypted using AES-256-GCM
+- A fresh random nonce is used for each template
+- The key is stored outside the database in a separate file
+- Authenticated encryption ensures integrity and tamper detection
+
+So the template storage is protected by AES-GCM, with integrity verification via the GCM tag.
+
+---
+
+## In one sentence
+
+This project uses a biometric multimodal pipeline: fingerprint ridge-orientation features + face LBP histograms, fused by weighted sum, and protected with AES-256-GCM.
+
+If you want, I can also explain this as a step-by-step flowchart or summarize the exact formulas used in each matcher.
+
+winget install --id Microsoft.OpenJDK.17 --exact --accept-source-agreements --accept-package-agreements
+
+java -version
+javac -version
+
+
+cd "C:\Users\HP\Downloads\BioSecure"
+mkdir out -Force
+javac -d out -cp "lib/*" src/*.java
+java -cp "out;lib/*" BioSecureApp
+
